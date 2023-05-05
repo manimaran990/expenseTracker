@@ -33,7 +33,6 @@ LOGIN_REDIRECT_URL = 'expense_tracker:index'
 # Application definition
 
 INSTALLED_APPS = [
-    'todo',
     'expense_tracker',
     'widget_tweaks',
     'bootstrap4',

@@ -18,6 +18,5 @@ from django.urls import path, include
 
 urlpatterns = [
     path('etracker/', include('expense_tracker.urls')),
-    # path('todo/', include("todo.urls")),
     path('admin/', admin.site.urls),
 ]
