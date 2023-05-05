@@ -1,6 +1,5 @@
 expense_tracker/config.py
 expense_tracker/labeled_dataset.csv
-expense_tracker/trained_model.pkl
 expense_tracker/migrations
 
 # Byte-compiled / optimized / DLL files
