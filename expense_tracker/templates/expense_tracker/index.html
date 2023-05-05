@@ -1,0 +1,29 @@
+{% extends 'expense_tracker/base.html' %}
+
+{% load static %}
+
+{% block content %}
+    <h1>Financial Overview</h1>
+    <p>Current Date: {{ current_date }}</p>
+    <p>Current Month: {{ current_month }}</p>
+    <p>Credited Amount: {{ credited_amount }}</p>
+    <p>Debited Amount: {{ debited_amount }}</p>
+    <p>Invested Amount: {{ invested_amount }}</p>
+    <p>Outstanding Loans: {{ outstanding_loans }}</p>
+    <div id="financial-overview" style="width: 100%; height: 600px;"></div>
+
+    <script>
+        const data = {{ graph_data|safe }};
+        const layout = {
+            title: 'Financial Overview',
+            xaxis: {
+                title: 'Categories',
+            },
+            yaxis: {
+                title: 'Amount',
+            },
+        };
+
+        Plotly.newPlot('financial-overview', data, layout);
+    </script>
+{% endblock %}

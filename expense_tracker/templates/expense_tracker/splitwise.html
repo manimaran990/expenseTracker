@@ -1,0 +1,74 @@
+{% extends 'expense_tracker/base.html' %}
+
+{% block content %}
+<h1>SplitWise Groups</h1>
+{% if messages %}
+<div class="messages">
+    {% for message in messages %}
+    <div class="alert {% if message.tags %}alert-{{ message.tags }}{% endif %}">
+        {{ message }}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+<table class="table">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Created At</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for group in groups_list %}
+        <tr>
+            <td>{{ group.id }}</td>
+            <td>{{ group.name }}</td>
+            <td>{{ group.created_at }}</td>
+            <td>
+                <button data-group-id="{{ group.id }}" type="button" class="btn btn-primary sync-button">
+                    Sync <i class="fas fa-sync-alt loading-spinner" style="display: none;"></i>
+                </button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<script>
+    document.querySelectorAll('.sync-button').forEach(function (button) {
+        button.addEventListener('click', function () {
+            var groupId = button.getAttribute('data-group-id');
+
+            // Show the loading spinner
+            var spinner = button.querySelector('.loading-spinner');
+            spinner.style.display = 'inline-block';
+
+            syncExpenses(groupId, spinner);
+        });
+    });
+
+    function syncExpenses(groupId, spinner) {
+        $.ajax({
+            url: "{% url 'expense_tracker:sync_expenses' %}",
+            data: {
+                'group_id': groupId
+            },
+            success: function (data) {
+                console.log('Sync expenses response:', data);
+                // Hide the loading spinner
+                spinner.style.display = 'none';
+
+                // Add any further actions after syncing the expenses, like showing a message or refreshing the page
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                console.log('AJAX error:', textStatus, errorThrown);
+
+                // Hide the loading spinner
+                spinner.style.display = 'none';
+            }
+        });
+    }
+</script>
+{% endblock %}

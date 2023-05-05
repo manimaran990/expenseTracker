@@ -1,0 +1,373 @@
+{% extends 'expense_tracker/base.html' %}
+
+{% load static %}
+
+{% block content %}
+<h1>Expense Summary</h1>
+
+{% if messages %}
+<div class="messages">
+    {% for message in messages %}
+    <div{% if message.tags %} class="{{ message.tags }}" {% endif %}>{{ message }}
+</div>
+{% endfor %}
+</div>
+{% endif %}
+
+<div class="modal fade" id="editExpenseModal" tabindex="-1" role="dialog" aria-labelledby="editExpenseModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editExpenseModalLabel">Edit Expense</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="edit-expense-form">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="edit_date">Date</label>
+                        <input type="date" class="form-control" id="edit_date" name="date" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_description">Description</label>
+                        <input type="text" class="form-control" id="edit_description" name="description" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_category">Category</label>
+                        <select class="form-control" id="edit_category" name="category" required>
+                            {% for category in categories %}
+                                <option value="{{ category.name }}">{{ category.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_amount">Amount</label>
+                        <input type="number" class="form-control" id="edit_amount" name="amount" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_transaction_type">Transaction Type</label>
+                        <select class="form-control" id="edit_transaction_type" name="transaction_type" required>
+                            <option value="debit">Debit</option>
+                            <option value="credit">Credit</option>
+                        </select>
+                    </div>
+                    <!-- Add the hidden input field for expense_id before the closing div tag -->
+                    <input type="hidden" name="expense_id" id="expense_id" value="">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Save changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <label for="month-year-select">Select Month-Year:</label>
+        <select id="month-year-select">
+            <option value="{{ current_year }}-{{ current_month }}">--Current Month-Year--</option>
+            {% for month_year in month_years %}
+            <pre>{{ month_years }}</pre>
+            <option value="{{ month_year.month_years|slice:':7' }}">{{ month_year.month_years|slice:':7' }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="col-md-4">
+        <form method="post" enctype="multipart/form-data" class="mt-2">
+            {% csrf_token %}
+            <div class="input-group">
+                <div class="custom-file">
+                    <input type="file" class="custom-file-input" id="csv_file" name="csv_file">
+                    <label class="custom-file-label" for="csv_file"></label>
+                </div>
+                <div class="input-group-append">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-upload"></i>
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+<div id="graph-container" style="width:100%;height:600px;"></div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div id="debit-chart"></div>
+    </div>
+    <div class="col-md-6">
+        <div id="credit-chart"></div>
+    </div>
+</div>
+
+
+<!-- Add the table structure -->
+<table id="expenses-table" class="display">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Date</th>
+            <th>Description</th>
+            <th>Category</th>
+            <th>Amount</th>
+            <th>Transaction Type</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    </tbody>
+</table>
+
+<script>
+    var expenses; // Declare the expenses variable outside the function
+    var expenseTable; // Declare the expenseTable variable outside the function
+
+    function drawGraph(graphData) {
+        console.log('Graph data before plotting:', graphData);
+
+        // Modify the trace object to add colors
+        for (let i = 0; i < graphData.data.length; i++) {
+            let trace = graphData.data[i];
+            trace.marker = {
+                color: []
+            };
+
+            for (let j = 0; j < trace.x.length; j++) {
+                trace.marker.color.push(getColorForCategory(trace.x[j]));
+            }
+        }
+
+        Plotly.newPlot('graph-container', graphData.data, graphData.layout);
+    }
+
+    function getColorForCategory(category) {
+        const colors = {
+            'Outing': '#1f77b4',
+            'Trash': '#ff7f0e',
+            'Entertainment - Other': '#2ca02c',
+            'Parking': '#d62728',
+            'Taxi': '#9467bd',
+            'Entertainment': '#8c564b',
+            'Hand loan': '#e377c2',
+            'Gifts': '#7f7f7f',
+            'Bus/train': '#bcbd22',
+            'Liquor': '#17becf',
+            'TV/Phone/Internet': '#6b8e23',
+            'Rent': '#800000',
+            'Household supplies': '#ff1493',
+            'General': '#800080',
+            'Insurance': '#cd5c5c',
+            'Car': '#b8860b',
+            'Dining out': '#008000',
+            'Movies': '#4682b4',
+            'Groceries': '#9acd32'
+        };
+
+        return colors[category] || '#808080'; // Default gray color if the category is not in the colors object
+    }
+
+    function populateExpenseTable(expenses, expenseTable) {
+        var parsedTableJSON = expenses;
+        console.log("expenses data before table:", parsedTableJSON);
+
+        // Clear the existing data
+        expenseTable.clear().draw();
+
+        // Append new data
+        for (var i = 0; i < expenses.length; i++) {
+            var expense = expenses[i];
+            var fields = expense.fields;
+            var row =
+                "<tr><td>" +
+                expense.pk +
+                "</td><td>" +
+                fields.date +
+                "</td><td>" +
+                fields.description +
+                "</td><td>" +
+                fields.category_name +
+                "</td><td>" +
+                fields.amount +
+                "</td><td>" +
+                fields.transaction_type +
+                '</td><td><button class="btn btn-sm btn-primary edit-btn">Edit</button> <button class="btn btn-sm btn-danger delete-btn">Delete</button></td></tr>';
+            expenseTable.row.add($(row)).draw(false);
+        }
+    }
+
+
+    function drawPieCharts(debitData, creditData) {
+        // Debit chart
+        const debitTrace = {
+            type: 'pie',
+            labels: debitData.labels,
+            values: debitData.values,
+            marker: {
+                colors: debitData.colors
+            },
+            hoverinfo: 'label+value'
+        };
+
+        const debitLayout = {
+            title: 'Debit Expenses by Category',
+        };
+
+        Plotly.newPlot('debit-chart', [debitTrace], debitLayout);
+
+        // Credit chart
+        const creditTrace = {
+            type: 'pie',
+            labels: creditData.labels,
+            values: creditData.values,
+            marker: {
+                colors: creditData.colors
+            },
+            hoverinfo: 'label+value'
+        };
+
+        const creditLayout = {
+            title: 'Credit Expenses by Category',
+        };
+
+        Plotly.newPlot('credit-chart', [creditTrace], creditLayout);
+    }
+
+    $(document).ready(function () {
+        expenseTable = $('#expenses-table').DataTable(); // Assign the value here
+        drawGraph({{ graphJSON| safe }});
+    var parsedTableJSON = JSON.parse('{{ expenses|safe }}');
+    expenses = parsedTableJSON; // Assign the value here
+    populateExpenseTable(parsedTableJSON, expenseTable);
+
+    $('input[type="file"]').on('change', function () {
+        var fileName = $(this).val().split('\\').pop();
+        $(this).siblings('.custom-file-label').addClass('selected').html(fileName);
+    });
+
+    $('#month-year-select').on('change', function () {
+        var selectedMonthYear = $(this).val();
+        console.log(selectedMonthYear);
+
+        if (selectedMonthYear) {
+            $.ajax({
+                url: "{% url 'expense_tracker:expenses_summary_data' %}",
+                data: {
+                    'month_year': selectedMonthYear
+                },
+                success: function (data) {
+                    console.log('AJAX response data:', data);
+                    var parsedGraphJSON = JSON.parse(data.graphJSON);
+                    var parsedTableJSON = JSON.parse(data.expenses);
+                    console.log("after choosing dropdown: ", parsedTableJSON)
+                    drawGraph(parsedGraphJSON);
+                    populateExpenseTable(parsedTableJSON, expenseTable);
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    console.log('AJAX error:', textStatus, errorThrown);
+                }
+            });
+        } else {
+            // Handle empty selection if needed
+        }
+    });
+
+    // Edit button event listener
+    $('body').on('click', '.edit-btn', function () {
+        var row = $(this).closest('tr');
+        var rowData = expenseTable.row(row).data();
+
+        // Populate the form with the row data
+        var form = $('#edit-expense-form');
+        form.find('input[name="date"]').val(rowData[1]);
+        form.find('input[name="description"]').val(rowData[2]);
+        form.find('select[name="category"]').val(rowData[3]);
+        form.find('input[name="amount"]').val(rowData[4]);
+        form.find('select[name="transaction_type"]').val(rowData[5]);
+        form.find('input[name="expense_id"]').val(rowData[0]); // Set the hidden input field for expense_id
+
+        // Show the form
+        console.log("clicked edit button");
+        $('#editExpenseModal').modal('show');
+    });
+
+
+    $('body').on('click', '.delete-btn', function () {
+        var row = $(this).closest('tr');
+        var rowData = expenseTable.row(row).data();
+
+        // Send a request to delete the expense
+        $.ajax({
+            url: "{% url 'expense_tracker:delete_expense' %}",
+            method: 'POST',
+            data: {
+                'expense_id': rowData[0],
+                'csrfmiddlewaretoken': '{{ csrf_token }}'
+            },
+            success: function (data) {
+                if (data.status === 'success') {
+                    // Remove the row from the table
+                    expenseTable.row(row).remove().draw();
+                } else {
+                    alert('Error deleting expense');
+                }
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                console.log('AJAX error:', textStatus, errorThrown);
+            }
+        });
+    });
+
+    // Add event listener for form submission
+    $('#edit-expense-form').on('submit', function (event) {
+        event.preventDefault();
+
+        // Get CSRF token from cookies
+        function getCookie(name) {
+            var cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                var cookies = document.cookie.split(';');
+                for (var i = 0; i < cookies.length; i++) {
+                    var cookie = jQuery.trim(cookies[i]);
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        var csrfToken = getCookie('csrftoken');
+
+        // Update the expense using an AJAX request
+        const formData = new FormData(this);
+        fetch('{% url "expense_tracker:update_expense" %}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': csrfToken,
+            },
+        })
+            .then(function (response) {
+                return response.json();
+            })
+            .then(function (data) {
+                if (data.status === 'success') {
+                    // Refresh the page or update the table row
+                    location.reload();
+                } else {
+                    alert('Error updating expense');
+                }
+            });
+    });
+
+
+    });
+</script>
+
+{% endblock %}
