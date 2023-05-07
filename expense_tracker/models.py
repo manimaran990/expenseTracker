@@ -1,6 +1,11 @@
 from django.db import models
 from django.contrib.auth.models import User
 
+CURRENCY_TYPE_CHOICES = [
+        ('CAD', 'Canadian Dollar'),
+        ('INR', 'Indian Rupee')
+    ]
+
 class Category(models.Model):
     id = models.BigAutoField(primary_key=True)
     name = models.CharField(max_length=100)
@@ -20,6 +25,7 @@ class Investment(models.Model):
     description = models.CharField(max_length=255)
     investment_category = models.ForeignKey(InvestmentCategory, on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
+    currency = models.CharField(max_length=3, choices=CURRENCY_TYPE_CHOICES, default='INR')
     date = models.DateField()
 
     def __str__(self):
@@ -30,11 +36,8 @@ class Expense(models.Model):
         ('C', 'Credit'),
         ('D', 'Debit'),
         ('T', 'Transfer'),
-        ('R', 'Refund')
-    ]
-    CURRENCY_TYPE_CHOICES = [
-        ('CAD', 'Canadian Dollar'),
-        ('INR', 'Indian Rupee')
+        ('R', 'Refund'),
+        ('I', 'Investment')
     ]
 
     id = models.BigAutoField(primary_key=True)
@@ -43,6 +46,7 @@ class Expense(models.Model):
     description = models.CharField(max_length=255)
     currency = models.CharField(max_length=3, choices=CURRENCY_TYPE_CHOICES, default='CAD')
     amount = models.DecimalField(max_digits=10, decimal_places=2)
+    owed_share = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
     date = models.DateField()
     transaction_type = models.CharField(max_length=1, choices=TRANSACTION_TYPE_CHOICES, default='D')
 

@@ -1,19 +1,59 @@
 {% extends 'expense_tracker/base.html' %}
 
 {% load bootstrap4 %}
+{% load custom_filters %}
+{% load custom_tags %}
 
 {% block content %}
-<h1>Add Transaction</h1>
-<form method="post">
-    {% csrf_token %}
-    {% for field in form %}
-        <div class="form-group">
-            {% bootstrap_field field %}
-            {% if field.help_text %}
-                <small class="form-text text-muted">{{ field.help_text }}</small>
-            {% endif %}
-        </div>
+<h2>Add Expense</h2>
+
+<!-- Add this block to display messages -->
+{% if messages %}
+<div class="container mt-3">
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }}">
+        {{ message }}
+    </div>
     {% endfor %}
-    <button type="submit" class="btn btn-primary">Submit</button>
+</div>
+{% endif %}
+<!-- End of messages block -->
+
+<form method="post" id="expense_form">
+    {% csrf_token %}
+    <div class="container">
+        <div class="row">
+            {% for field in form %}
+                {% with is_owed_share=field.name|ifequal:"owed_share" is_investment_category=field.name|ifequal:"inv_investment_category" %}
+                {% if not is_owed_share and not is_investment_category %}
+                    <div class="col-12 mb-3" style="max-width: 300px;">
+                        <label for="{{ field.auto_id }}">{{ field.label }}</label>
+                        <div>{{ field|add_class:"form-control" }}</div>
+                    </div>
+                {% endif %}
+                {% endwith %}
+            {% endfor %}
+        </div>
+        <button type="submit" class="btn btn-primary">Save</button>
+    </div>
 </form>
+
+<script>
+    const transactionTypeField = document.querySelector("#id_transaction_type");
+    const transactionFields = document.querySelectorAll("[data-transaction]");
+
+    function toggleFields() {
+        const transactionType = transactionTypeField.value;
+        transactionFields.forEach(el => {
+            if (el.getAttribute("data-transaction").includes(transactionType)) {
+                el.style.display = "block";
+            } else {
+                el.style.display = "none";
+            }
+        });
+    }
+
+    transactionTypeField.addEventListener("change", toggleFields);
+    toggleFields();
+</script>
 {% endblock %}

@@ -7,7 +7,7 @@ class SplitWise:
         self.sObj = splitwise.Splitwise(consumer_key, consumer_secret,api_key=api_key)
         self.current_user = self.sObj.getCurrentUser()
         self.GroupsInfo = namedtuple('GroupsInfo', ['id', 'name', 'created_at'])
-        self.ExpenseInfo = namedtuple('ExpenseInfo', ['id', 'description', 'date', 'currency', 'category', 'total_amount', 'your_share'])
+        self.ExpenseInfo = namedtuple('ExpenseInfo', ['id', 'description', 'date', 'currency', 'category', 'total_amount', 'owed_share'])
         self.groups_list = []
         self.expense_list = []
 
@@ -23,7 +23,7 @@ class SplitWise:
         expenses = self.sObj.getExpenses(limit=999, group_id=group_id)
         for expense in expenses:
             expense_id = expense.id
-            description = expense.description.strip()
+            description = expense.description.strip().replace("'", "")
             date = expense.getDate()
             currency = expense.getCurrencyCode()
 
@@ -33,15 +33,13 @@ class SplitWise:
             # Get the total amount of the expense
             total_amount = expense.getCost()
 
-            # Calculate your share
+            # get your share
             users = expense.users
             for user in users:
                 if user.id == self.current_user.id:
-                    your_share = float(user.net_balance)
-                    if your_share > 0:
-                        your_share = float(total_amount) - your_share
+                    owed_share = user.owed_share
 
-            expense_info = self.ExpenseInfo(expense_id, description, date, currency, category, total_amount, your_share)
+            expense_info = self.ExpenseInfo(expense_id, description, date, currency, category, total_amount, owed_share)
             self.expense_list.append(expense_info)
         return self.expense_list
 

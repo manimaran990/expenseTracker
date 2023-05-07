@@ -16,6 +16,7 @@ def expenses_to_json(expenses):
                 "description": expense.description,
                 "currency": expense.currency,
                 "amount": str(expense.amount),
+                "owed_share": str(expense.owed_share),
                 "date": expense.date.strftime("%Y-%m-%d"),
                 "transaction_type": expense.transaction_type,
             },

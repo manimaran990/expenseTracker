@@ -19,7 +19,7 @@ from datetime import date
 import plotly.graph_objs as go
 from datetime import date
 from datetime import datetime
-from .forms import ExpenseForm
+from .forms import CombinedForm
 from .models import Expense, Investment, Category, InvestmentCategory
 from django.http import JsonResponse
 import matplotlib.pyplot as plt
@@ -77,40 +77,38 @@ def index(request):
 @login_required
 def add_expense(request):
     if request.method == 'POST':
-        form = ExpenseForm(request.POST)
+        form = CombinedForm(request.POST)
         if form.is_valid():
-            category_id_or_name = request.POST['category']
-
-            if category_id_or_name.startswith('i'):
-                # Handle investment category
-                investment_category_id = int(category_id_or_name[1:])
-
-                # Create a new investment
+            transaction_type = form.cleaned_data['transaction_type']
+            if transaction_type == 'I':
+                 # Create an Investment instance
                 investment = Investment(
                     user=request.user,
-                    category=InvestmentCategory.objects.get(pk=investment_category_id),
+                    investment_category=form.cleaned_data['category'],
                     description=form.cleaned_data['description'],
                     amount=form.cleaned_data['amount'],
-                    date=form.cleaned_data['date']
+                    date=form.cleaned_data['date'],
                 )
                 investment.save()
+                messages.success(request, 'Investment successfully added')
             else:
-                # Handle expense category
-                expense = form.save(commit=False)
-                expense.user = request.user
-
-                try:
-                    category_id = int(category_id_or_name)
-                    category = Category.objects.get(pk=category_id)
-                except ValueError:
-                    category, _ = Category.objects.get_or_create(name=category_id_or_name)
-
-                expense.category = category
+                # Create an Expense instance
+                expense = Expense(
+                    user=request.user,
+                    category=form.cleaned_data['category'],
+                    description=form.cleaned_data['description'],
+                    currency=form.cleaned_data['currency'],
+                    amount=form.cleaned_data['amount'],
+                    owed_share=form.cleaned_data['owed_share'],
+                    date=form.cleaned_data['date'],
+                    transaction_type=transaction_type,
+                )
                 expense.save()
-
-            return redirect('expense_tracker:index')
+                messages.success(request, 'Expense successfully added')
+            return redirect('expense_tracker:add_expense')  # Replace with the correct URL pattern name for expense list
     else:
-        form = ExpenseForm()
+        form = CombinedForm()
+
     return render(request, 'expense_tracker/add_expense.html', {'form': form})
 
 @login_required
@@ -145,22 +143,36 @@ def expense_summary(request):
     else:
         current_month = date.today().month
         current_year = date.today().year
-        categories = Category.objects.exclude(name='Settle up')
+        categories = Category.objects.all()
         expenses = Expense.objects.filter(user=request.user, date__year=current_year, date__month=current_month, category__in=categories)
+        expenses = expenses.exclude(description='Payment')
 
         # Get unique month-year values
         month_years = Expense.objects.filter(user=request.user).annotate(
         month_years=ExpressionWrapper(TruncMonth('date'), output_field=CharField())
     ).values('month_years').distinct().order_by('-month_years')
-
         expenses_by_category = []
         for category in categories:
             expenses_by_category.append({
                 'category': category.name,
-                'total': sum(exp.amount for exp in expenses if exp.category == category)
+                'total': sum(exp.owed_share for exp in expenses if exp.category == category)
             })
 
-        fig = px.bar(expenses_by_category, x='category', y='total', text='total', labels={'total': 'Expenses', 'category': 'Categories'}, title='Expenses by Category')
+        if expenses_by_category:
+            fig = px.bar(expenses_by_category, x='category', y='total', text='total', labels={'total': 'Expenses', 'category': 'Categories'}, title='Expenses by Category')
+        else:
+            fig = go.Figure()
+            fig.update_layout(title="Expenses by Category", xaxis_title="Categories", yaxis_title="Expenses")
+            fig.add_annotation(
+                x=0.5,
+                y=0.5,
+                xref="paper",
+                yref="paper",
+                text="No data available",
+                showarrow=False,
+                font_size=18,
+                opacity=0.7
+            )
         graphJSON = json.dumps(fig, cls=utils.PlotlyJSONEncoder)
         
         # serialized_expenses = serializers.serialize('json', expenses)
@@ -186,14 +198,15 @@ def expenses_summary_data(request):
         year = today.year
         month = today.month
 
-    categories = Category.objects.exclude(name='Settle up')
+    categories = Category.objects.all()
     expenses = Expense.objects.filter(user=request.user, date__year=year, date__month=month, category__in=categories)
+    expenses = expenses.exclude(description='Payment')
 
     expenses_by_category = []
     for category in categories:
         expenses_by_category.append({
             'category': category.name,
-            'total': sum(exp.amount for exp in expenses if exp.category == category)
+            'total': sum(exp.owed_share for exp in expenses if exp.category == category)
         })
 
     fig = px.bar(expenses_by_category, x='category', y='total', text='total', labels={'total': 'Expenses', 'category': 'Categories'}, title='Expenses by Category')
@@ -231,16 +244,16 @@ def sync_expenses(request):
             category = get_category(expense_info.description)
             # Create a new category if it doesn't exist
             category, _ = Category.objects.get_or_create(name=category)
-
             expense = Expense(
                 id=expense_info.id,
                 user=request.user,
                 date = datetime.strptime(expense_info.date, "%Y-%m-%dT%H:%M:%SZ").strftime("%Y-%m-%d"),
                 description=expense_info.description,
                 category=category,
-                amount=abs(expense_info.your_share),
+                amount=expense_info.total_amount,
+                owed_share=expense_info.owed_share,
                 currency=expense_info.currency,
-                transaction_type='debit',
+                transaction_type='D',
             )
             expense.save()
 
@@ -276,6 +289,7 @@ def update_expense(request):
         description = request.POST.get('description')
         category_name = request.POST.get('category')
         amount = request.POST.get('amount')
+        owed_share = request.POST.get('owed_share')
         transaction_type = request.POST.get('transaction_type')
         
         # Update the existing expense
@@ -287,13 +301,13 @@ def update_expense(request):
         expense.description = description
         expense.category = category
         expense.amount = amount
+        expense.owed_share = owed_share
         expense.transaction_type = transaction_type
         expense.save()
         
         return JsonResponse({'status': 'success'})
 
 @login_required
-@csrf_exempt
 def delete_expense(request):
     if request.method == 'POST':
         # Extract data from the request
@@ -306,3 +320,12 @@ def delete_expense(request):
         
         return JsonResponse({'status': 'success'})
 
+@login_required
+def get_expense_categories(request):
+    categories = Category.objects.values('id', 'name')
+    return JsonResponse(list(categories), safe=False)
+
+@login_required
+def get_investment_categories(request):
+    categories = InvestmentCategory.objects.values('id', 'name')
+    return JsonResponse(list(categories), safe=False)

@@ -1,15 +1,37 @@
 from django import forms
-from .models import Expense, Category, InvestmentCategory
+from django.forms import ModelForm, DateInput
+from .models import Expense, Investment, Category, InvestmentCategory, CURRENCY_TYPE_CHOICES
+from datetime import date
 
-class ExpenseForm(forms.ModelForm):
-    category = forms.ChoiceField(choices=(), required=True)
+class DateInput(forms.DateInput):
+    input_type = 'date'
 
-    class Meta:
-        model = Expense
-        fields = ['category', 'description', 'currency', 'amount', 'date', 'transaction_type']
+class CombinedForm(forms.Form):
+    # Common fields
+    description = forms.CharField()
+    amount = forms.DecimalField()
+    currency = forms.ChoiceField(choices=CURRENCY_TYPE_CHOICES)
+    date = forms.DateField(widget=DateInput(attrs={'value': date.today().strftime('%Y-%m-%d')}))
+    transaction_type = forms.ChoiceField(choices=Expense.TRANSACTION_TYPE_CHOICES)
+    owed_share = forms.DecimalField(required=False, initial=0.0)
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        expense_categories = [(cat.id, cat.name) for cat in Category.objects.all()]
-        investment_categories = [(f"i{cat.id}", cat.name) for cat in InvestmentCategory.objects.all()]
-        self.fields['category'].choices = [('expense', '--- Expense Categories ---')] + expense_categories + [('investment', '--- Investment Categories ---')] + investment_categories
+    # Expense fields
+    category = forms.ModelChoiceField(queryset=Category.objects.all())
+
+    # Investment fields
+    investment_category = forms.ModelChoiceField(queryset=InvestmentCategory.objects.all(), required=False)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        transaction_type = cleaned_data.get("transaction_type")
+
+        if transaction_type == "I":
+            if not cleaned_data.get("investment_category"):
+                raise forms.ValidationError("Investment category is required when transaction type is 'I'.")
+            # Set owed_share to None when transaction_type is 'I'
+            cleaned_data["owed_share"] = None
+        else:
+            if not cleaned_data.get("category"):
+                raise forms.ValidationError("Expense category is required when transaction type is 'E'.")
+
+        return cleaned_data
