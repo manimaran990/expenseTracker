@@ -15,6 +15,7 @@ from splitwise import Splitwise
 from splitwise.expense import Expense
 from .my_splitwise import SplitWise
 from .models import Expense, Investment
+from django.db.models import Sum
 from datetime import date
 import plotly.graph_objs as go
 from datetime import date
@@ -48,28 +49,29 @@ def index(request):
     expenses = Expense.objects.filter(user=request.user, date__month=current_month)
     investments = Investment.objects.filter(user=request.user, date__month=current_month)
 
-    credited_amount = sum(exp.amount for exp in expenses if exp.transaction_type == 'C')
-    debited_amount = sum(exp.amount for exp in expenses if exp.transaction_type == 'D')
-    invested_amount = sum(inv.amount for inv in investments)
-    outstanding_loans = 0  # Calculate this based on your loan model if available
+    credited_amount_cad = sum(exp.amount for exp in expenses if exp.transaction_type == 'C' and exp.currency == 'CAD')
+    credited_amount_inr = sum(exp.amount for exp in expenses if exp.transaction_type == 'C' and exp.currency == 'INR')
 
-    # Generate the graph data
-    data = [
-        go.Bar(
-            x=['Credited', 'Debited', 'Invested', 'Outstanding Loans'],
-            y=[credited_amount, debited_amount, invested_amount, outstanding_loans],
-            marker=dict(color='rgb(142, 68, 173)')
-        )
-    ]
+    debited_amount_cad = sum(exp.amount for exp in expenses if exp.transaction_type == 'D' and exp.currency == 'CAD')
+    debited_amount_inr = sum(exp.amount for exp in expenses if exp.transaction_type == 'D' and exp.currency == 'INR')
+
+    invested_amount_cad = sum(inv.amount for inv in investments if inv.currency == 'CAD')
+    invested_amount_inr = sum(inv.amount for inv in investments if inv.currency == 'INR')
+
+    outstanding_loans_cad = 0  # Calculate this based on your loan model if available, for CAD
+    outstanding_loans_inr = 0  # Calculate this based on your loan model if available, for INR
 
     context = {
         'current_date': today,
         'current_month': current_month,
-        'credited_amount': credited_amount,
-        'debited_amount': debited_amount,
-        'invested_amount': invested_amount,
-        'outstanding_loans': outstanding_loans,
-        'graph_data': data,
+        'credited_amount_cad': credited_amount_cad,
+        'credited_amount_inr': credited_amount_inr,
+        'debited_amount_cad': debited_amount_cad,
+        'debited_amount_inr': debited_amount_inr,
+        'invested_amount_cad': invested_amount_cad,
+        'invested_amount_inr': invested_amount_inr,
+        'outstanding_loans_cad': outstanding_loans_cad,
+        'outstanding_loans_inr': outstanding_loans_inr,
     }
 
     return render(request, 'expense_tracker/index.html', context)
@@ -324,6 +326,20 @@ def delete_expense(request):
 def get_expense_categories(request):
     categories = Category.objects.values('id', 'name')
     return JsonResponse(list(categories), safe=False)
+
+@login_required
+def get_expense_data(request):
+    today = date.today()
+    current_month = today.month
+    expenses = Expense.objects.filter(user=request.user, date__month=current_month)
+    investments = Investment.objects.filter(user=request.user, date__month=current_month)
+    debit_expenses = expenses.filter(transaction_type='D').values('category__name').annotate(total_amount=Sum('amount'))
+    credit_expenses = expenses.filter(transaction_type='C').values('category__name').annotate(total_amount=Sum('amount'))
+
+    return JsonResponse({
+        'debit_expenses': list(debit_expenses),
+        'credit_expenses': list(credit_expenses),
+    }, safe=False)
 
 @login_required
 def get_investment_categories(request):

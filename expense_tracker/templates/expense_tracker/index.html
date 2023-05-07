@@ -3,27 +3,109 @@
 {% load static %}
 
 {% block content %}
-    <h1>Financial Overview</h1>
-    <p>Current Date: {{ current_date }}</p>
-    <p>Current Month: {{ current_month }}</p>
-    <p>Credited Amount: {{ credited_amount }}</p>
-    <p>Debited Amount: {{ debited_amount }}</p>
-    <p>Invested Amount: {{ invested_amount }}</p>
-    <p>Outstanding Loans: {{ outstanding_loans }}</p>
-    <div id="financial-overview" style="width: 100%; height: 600px;"></div>
+<div class="container mt-4">
+    <h2 class="mb-4">Financial Overview</h2>
+    <div class="row">
+        <div class="col-md-6">
+            <h4>Current Date: <span class="font-weight-normal">{{ current_date }}</span></h4>
+        </div>
+        <div class="col-md-6">
+            <h4>Current Month: <span class="font-weight-normal">{{ current_month }}</span></h4>
+        </div>
+    </div>
+    <div class="row mt-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-success mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Credited Amount</h5>
+                    <p class="card-text">CAD: {{ credited_amount_cad }}</p>
+                    <p class="card-text">INR: {{ credited_amount_inr }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-danger mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Debited Amount</h5>
+                    <p class="card-text">CAD: {{ debited_amount_cad }}</p>
+                    <p class="card-text">INR: {{ debited_amount_inr }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Invested Amount</h5>
+                    <p class="card-text">CAD: {{ invested_amount_cad }}</p>
+                    <p class="card-text">INR: {{ invested_amount_inr }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Outstanding Loans</h5>
+                    <p class="card-text">CAD: {{ outstanding_loans_cad }}</p>
+                    <p class="card-text">INR: {{ outstanding_loans_inr }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
-    <script>
-        const data = {{ graph_data|safe }};
-        const layout = {
-            title: 'Financial Overview',
-            xaxis: {
-                title: 'Categories',
-            },
-            yaxis: {
-                title: 'Amount',
-            },
-        };
+<div class="row">
+    <div class="col-md-6">
+        <div id="debit-chart">
+            <canvas id="debitChart"></canvas>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div id="credit-chart">
+            <canvas id="creditChart"></canvas>
+        </div>
+    </div>
+</div>
 
-        Plotly.newPlot('financial-overview', data, layout);
-    </script>
+<script>
+    fetch('{% url "expense_tracker:get_expense_data" %}')
+        .then(response => response.json())
+        .then(data => {
+            const debitCtx = document.getElementById('debitChart').getContext('2d');
+            const creditCtx = document.getElementById('creditChart').getContext('2d');
+
+            const debitChartData = {
+                labels: data.debit_expenses.map(item => item.category__name),
+                datasets: [{
+                    data: data.debit_expenses.map(item => item.total_amount),
+                    backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40']
+                }]
+            };
+
+            const creditChartData = {
+                labels: data.credit_expenses.map(item => item.category__name),
+                datasets: [{
+                    data: data.credit_expenses.map(item => item.total_amount),
+                    backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40']
+                }]
+            };
+
+            new Chart(debitCtx, {
+                type: 'doughnut',
+                data: debitChartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+
+            new Chart(creditCtx, {
+                type: 'doughnut',
+                data: creditChartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        });
+</script>
 {% endblock %}

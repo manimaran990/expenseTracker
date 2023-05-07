@@ -25,13 +25,7 @@ class CombinedForm(forms.Form):
         cleaned_data = super().clean()
         transaction_type = cleaned_data.get("transaction_type")
 
-        if transaction_type == "I":
-            if not cleaned_data.get("investment_category"):
-                raise forms.ValidationError("Investment category is required when transaction type is 'I'.")
-            # Set owed_share to None when transaction_type is 'I'
-            cleaned_data["owed_share"] = None
-        else:
-            if not cleaned_data.get("category"):
-                raise forms.ValidationError("Expense category is required when transaction type is 'E'.")
+        if transaction_type == "I" or transaction_type == "C" or transaction_type == "R":
+            cleaned_data['owed_share'] = 0.0
 
         return cleaned_data
