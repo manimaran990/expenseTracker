@@ -1,14 +1,38 @@
 from django.db import models
 from django.contrib.auth.models import User
 
+GROUPED_CATEGORIES = {
+    'Transit': ['Gas/fuel', 'Taxi', 'Car', 'Parking'],
+    'Refund': ['Refund'],
+    'Shopping': ['Online Shopping', 'Household supplies', 'Groceries'],
+    'Food': ['Fruits', 'Fish/Meat', 'Dining out', 'Restaurant'],
+    'Income': ['Paycheck'],
+    'Utility': ['Trash', 'TV/Phone/Internet', 'Rent'],
+    'Entertainment': ['Entertainment - Other', 'Movies', 'Entertainment'],
+    'Insurance': ['Insurance'],
+    'Gifts': ['Gifts', 'Cake'],
+    'Liquor': ['Liquor'],
+    'General': ['General'],
+    'Public Transport': ['Bus/train'],
+}
+
 CURRENCY_TYPE_CHOICES = [
         ('CAD', 'Canadian Dollar'),
         ('INR', 'Indian Rupee')
     ]
 
+class CategoryGroup(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.CharField(max_length=255, null=True, blank=True)  # New field
+
+    def __str__(self):
+        return self.name
+    
 class Category(models.Model):
     id = models.BigAutoField(primary_key=True)
     name = models.CharField(max_length=100)
+    description = models.CharField(max_length=255, null=True, blank=True)  # New field
+    group = models.ForeignKey(CategoryGroup, on_delete=models.CASCADE)
 
     def __str__(self):
         return self.name

@@ -34,6 +34,7 @@ class SplitWise:
             total_amount = expense.getCost()
 
             # get your share
+            owed_share = 0.0
             users = expense.users
             for user in users:
                 if user.id == self.current_user.id:

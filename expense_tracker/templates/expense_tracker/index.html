@@ -18,8 +18,8 @@
             <div class="card text-white bg-success mb-3">
                 <div class="card-body">
                     <h5 class="card-title">Credited Amount</h5>
-                    <p class="card-text">CAD: {{ credited_amount_cad }}</p>
-                    <p class="card-text">INR: {{ credited_amount_inr }}</p>
+                    <p class="card-text">CAD: {{ credited_amount_cad }} $</p>
+                    <p class="card-text">INR: {{ credited_amount_inr }} ₹</p>
                 </div>
             </div>
         </div>
@@ -27,8 +27,8 @@
             <div class="card text-white bg-danger mb-3">
                 <div class="card-body">
                     <h5 class="card-title">Debited Amount</h5>
-                    <p class="card-text">CAD: {{ debited_amount_cad }}</p>
-                    <p class="card-text">INR: {{ debited_amount_inr }}</p>
+                    <p class="card-text">CAD: {{ debited_amount_cad }} $</p>
+                    <p class="card-text">INR: {{ debited_amount_inr }} ₹</p>
                 </div>
             </div>
         </div>
@@ -36,8 +36,8 @@
             <div class="card text-white bg-info mb-3">
                 <div class="card-body">
                     <h5 class="card-title">Invested Amount</h5>
-                    <p class="card-text">CAD: {{ invested_amount_cad }}</p>
-                    <p class="card-text">INR: {{ invested_amount_inr }}</p>
+                    <p class="card-text">CAD: {{ invested_amount_cad }} $</p>
+                    <p class="card-text">INR: {{ invested_amount_inr }} ₹</p>
                 </div>
             </div>
         </div>
@@ -45,14 +45,14 @@
             <div class="card text-white bg-warning mb-3">
                 <div class="card-body">
                     <h5 class="card-title">Outstanding Loans</h5>
-                    <p class="card-text">CAD: {{ outstanding_loans_cad }}</p>
-                    <p class="card-text">INR: {{ outstanding_loans_inr }}</p>
+                    <p class="card-text">CAD: {{ outstanding_loans_cad }} $</p>
+                    <p class="card-text">INR: {{ outstanding_loans_inr }} ₹</p>
                 </div>
             </div>
         </div>
     </div>
 </div>
-
+<br>
 <div class="row">
     <div class="col-md-6">
         <div id="debit-chart">
@@ -65,6 +65,58 @@
         </div>
     </div>
 </div>
+<br>
+<!-- Add a new row for overall expenses -->
+<div class="container">
+    <h2 class="mb-4">Overall Financial Overview</h2>
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card text-white bg-success mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Overall Credited Amount</h5>
+                    <p class="card-text">CAD: {{ overall_credited_amount_cad }} $</p>
+                    <p class="card-text">INR: {{ overall_credited_amount_inr }} ₹</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-danger mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Overall Debited Amount</h5>
+                    <p class="card-text">CAD: {{ overall_debited_amount_cad }} $</p>
+                    <p class="card-text">INR: {{ overall_debited_amount_inr }} ₹</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Overall Invested Amount</h5>
+                    <p class="card-text">CAD: {{ overall_invested_amount_cad }} $</p>
+                    <p class="card-text">INR: {{ overall_invested_amount_inr }} ₹</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Overall Outstanding Loans</h5>
+                    <p class="card-text">CAD: {{ outstanding_loans_cad }} $</p>
+                    <p class="card-text">INR: {{ outstanding_loans_inr }} ₹</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<br>
+<div class="col-md-6">
+    <div id="overall-debit-chart">
+        <canvas id="overallDebitChart"></canvas>
+    </div>
+    <div id="overall-credit-chart" class="mt-4">
+        <canvas id="overallCreditChart"></canvas>
+    </div>
+</div>
 
 <script>
     fetch('{% url "expense_tracker:get_expense_data" %}')
@@ -72,6 +124,8 @@
         .then(data => {
             const debitCtx = document.getElementById('debitChart').getContext('2d');
             const creditCtx = document.getElementById('creditChart').getContext('2d');
+            const overallDebitCtx = document.getElementById('overallDebitChart').getContext('2d');
+            const overallCreditCtx = document.getElementById('overallCreditChart').getContext('2d');
 
             const debitChartData = {
                 labels: data.debit_expenses.map(item => item.category__name),
@@ -89,6 +143,22 @@
                 }]
             };
 
+            const overallDebitChartData = {
+                labels: data.overall_debit_expenses.map(item => item.category__name),
+                datasets: [{
+                    data: data.overall_debit_expenses.map(item => item.total_amount),
+                    backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40']
+                }]
+            };
+
+            const overallCreditChartData = {
+                labels: data.overall_credit_expenses.map(item => item.category__name),
+                datasets: [{
+                    data: data.overall_credit_expenses.map(item => item.total_amount),
+                    backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40']
+                }]
+            };
+
             new Chart(debitCtx, {
                 type: 'doughnut',
                 data: debitChartData,
@@ -101,6 +171,24 @@
             new Chart(creditCtx, {
                 type: 'doughnut',
                 data: creditChartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+
+            new Chart(overallDebitCtx, {
+                type: 'doughnut',
+                data: overallDebitChartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+
+            new Chart(overallCreditCtx, {
+                type: 'doughnut',
+                data: overallCreditChartData,
                 options: {
                     responsive: true,
                     maintainAspectRatio: false

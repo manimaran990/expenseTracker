@@ -86,22 +86,6 @@
         </select>
     </div>
 
-    <!-- <div class="col-md-4">
-        <form method="post" enctype="multipart/form-data" class="mt-2">
-            {% csrf_token %}
-            <div class="input-group">
-                <div class="custom-file">
-                    <input type="file" class="custom-file-input" id="csv_file" name="csv_file">
-                    <label class="custom-file-label" for="csv_file"></label>
-                </div>
-                <div class="input-group-append">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-upload"></i>
-                    </button>
-                </div>
-            </div>
-        </form>
-    </div> -->
 </div>
 
 <div id="graph-container" style="width:100%;height:600px;"></div>
@@ -136,41 +120,77 @@
         for (let i = 0; i < graphData.data.length; i++) {
             let trace = graphData.data[i];
             trace.marker = {
-                color: []
+                color: getColorForCategory(trace.name)
             };
-
-            for (let j = 0; j < trace.x.length; j++) {
-                trace.marker.color.push(getColorForCategory(trace.x[j]));
-            }
         }
 
         Plotly.newPlot('graph-container', graphData.data, graphData.layout);
     }
 
     function getColorForCategory(category) {
-        const colors = {
-            'Outing': '#1f77b4',
-            'Trash': '#ff7f0e',
-            'Entertainment - Other': '#2ca02c',
-            'Parking': '#d62728',
-            'Taxi': '#9467bd',
-            'Entertainment': '#8c564b',
-            'Hand loan': '#e377c2',
-            'Gifts': '#7f7f7f',
-            'Bus/train': '#bcbd22',
-            'Liquor': '#17becf',
-            'TV/Phone/Internet': '#6b8e23',
-            'Rent': '#800000',
-            'Household supplies': '#ff1493',
-            'General': '#800080',
-            'Insurance': '#cd5c5c',
-            'Car': '#b8860b',
-            'Dining out': '#008000',
-            'Movies': '#4682b4',
-            'Groceries': '#9acd32'
+        const cleanedCategory = category.trim().toLowerCase();
+        const mainCategories = {
+            'transit': {
+                'gas/fuel': '#1f77b4',
+                'taxi': '#ff7f0e',
+                'car': '#2ca02c',
+                'parking': '#d62728'
+            },
+            'refund': {
+                'refund': '#9467bd'
+            },
+            'shopping': {
+                'online shopping': '#8c564b',
+                'household supplies': '#e377c2',
+                'groceries': '#7f7c7f'
+            },
+            'food': {
+                'fruits': '#bcbd22',
+                'fish/meat': '#17becf',
+                'dining out': '#6b8e23',
+                'restaurant': '#800000'
+            },
+            'income': {
+                'paycheck': '#ff1493'
+            },
+            'utility': {
+                'trash': '#800080',
+                'tv/phone/internet': '#cd5c5c',
+                'rent': '#b8860b'
+            },
+            'entertainment': {
+                'entertainment - other': '#008000',
+                'movies': '#4682b4',
+                'entertainment': '#9acd32'
+            },
+            'insurance': {
+                'insurance': '#1E90FF'
+            },
+            'gifts': {
+                'gifts': '#FF4500',
+                'cake': '#00FF7F'
+            },
+            'liquor': {
+                'liquor': '#9400D3'
+            },
+            'general': {
+                'general': '#FFD700'
+            },
+            'public transport': {
+                'bus/train': '#8B0000'
+            }
         };
 
-        return colors[category] || '#808080'; // Default gray color if the category is not in the colors object
+        // Find the appropriate color for the subcategory
+        for (const mainCategory in mainCategories) {
+            const color = mainCategories[mainCategory][cleanedCategory];
+            if (color) {
+                return color;
+            }
+        }
+
+        console.log('Category not found in colors object:', category);
+        return '#808080'; // Default gray color if the category is not in the colors object
     }
 
     function populateExpenseTable(expenses, expenseTable) {
@@ -204,41 +224,41 @@
         }
     }
 
-    function drawPieCharts(debitData, creditData) {
-        // Debit chart
-        const debitTrace = {
-            type: 'pie',
-            labels: debitData.labels,
-            values: debitData.values,
-            marker: {
-                colors: debitData.colors
-            },
-            hoverinfo: 'label+value'
-        };
+    // function drawPieCharts(debitData, creditData) {
+    //     // Debit chart
+    //     const debitTrace = {
+    //         type: 'pie',
+    //         labels: debitData.labels,
+    //         values: debitData.values,
+    //         marker: {
+    //             colors: debitData.colors
+    //         },
+    //         hoverinfo: 'label+value'
+    //     };
 
-        const debitLayout = {
-            title: 'Debit Expenses by Category',
-        };
+    //     const debitLayout = {
+    //         title: 'Debit Expenses by Category',
+    //     };
 
-        Plotly.newPlot('debit-chart', [debitTrace], debitLayout);
+    //     Plotly.newPlot('debit-chart', [debitTrace], debitLayout);
 
-        // Credit chart
-        const creditTrace = {
-            type: 'pie',
-            labels: creditData.labels,
-            values: creditData.values,
-            marker: {
-                colors: creditData.colors
-            },
-            hoverinfo: 'label+value'
-        };
+    //     // Credit chart
+    //     const creditTrace = {
+    //         type: 'pie',
+    //         labels: creditData.labels,
+    //         values: creditData.values,
+    //         marker: {
+    //             colors: creditData.colors
+    //         },
+    //         hoverinfo: 'label+value'
+    //     };
 
-        const creditLayout = {
-            title: 'Credit Expenses by Category',
-        };
+    //     const creditLayout = {
+    //         title: 'Credit Expenses by Category',
+    //     };
 
-        Plotly.newPlot('credit-chart', [creditTrace], creditLayout);
-    }
+    //     Plotly.newPlot('credit-chart', [creditTrace], creditLayout);
+    // }
 
     $(document).ready(function () {
         expenseTable = $('#expenses-table').DataTable({

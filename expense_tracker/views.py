@@ -14,14 +14,13 @@ from django.urls import reverse
 from splitwise import Splitwise
 from splitwise.expense import Expense
 from .my_splitwise import SplitWise
-from .models import Expense, Investment
 from django.db.models import Sum
 from datetime import date
 import plotly.graph_objs as go
 from datetime import date
 from datetime import datetime
 from .forms import CombinedForm
-from .models import Expense, Investment, Category, InvestmentCategory
+from .models import Expense, Investment, Category, CategoryGroup, InvestmentCategory, GROUPED_CATEGORIES
 from django.http import JsonResponse
 import matplotlib.pyplot as plt
 import plotly.express as px
@@ -30,36 +29,64 @@ import pandas as pd
 import json
 import pickle
 
+model_path = 'expense_tracker/trained_model.pkl'
+
 def load_trained_model(model_path):
     with open(model_path, 'rb') as f:
         model = pickle.load(f)
     return model
 
-def get_category(description):
-    predicted_category = model.predict([description])[0]
-    return predicted_category
-
-model_path = 'expense_tracker/trained_model.pkl'
 model = load_trained_model(model_path)
+
+def get_category_and_group(description):
+    predicted_category = model.predict([description])[0]
+
+     # Iterate through GROUPED_CATEGORIES to find the correct category and group for the given description
+    for group, categories in GROUPED_CATEGORIES.items():
+        if predicted_category in categories:
+            group_name = group
+            category_name = predicted_category
+            break
+
+    # Get or create the CategoryGroup instance
+    group, _ = CategoryGroup.objects.get_or_create(name=group_name)
+
+    # Get or create the Category instance
+    category, _ = Category.objects.get_or_create(name=category_name, group=group)
+
+    return category
 
 @login_required
 def index(request):
     today = date.today()
     current_month = today.month
-    expenses = Expense.objects.filter(user=request.user, date__month=current_month)
-    investments = Investment.objects.filter(user=request.user, date__month=current_month)
+    current_expenses = Expense.objects.filter(user=request.user, date__month=current_month)
+    overall_expenses = Expense.objects.filter(user=request.user)
+    current_investments = Investment.objects.filter(user=request.user, date__month=current_month)
+    overall_investments = Investment.objects.filter(user=request.user)
 
-    credited_amount_cad = sum(exp.amount for exp in expenses if exp.transaction_type == 'C' and exp.currency == 'CAD')
-    credited_amount_inr = sum(exp.amount for exp in expenses if exp.transaction_type == 'C' and exp.currency == 'INR')
+    # Current month calculations
+    credited_amount_cad = sum(exp.amount for exp in current_expenses if exp.transaction_type == 'C' and exp.currency == 'CAD')
+    credited_amount_inr = sum(exp.amount for exp in current_expenses if exp.transaction_type == 'C' and exp.currency == 'INR')
 
-    debited_amount_cad = sum(exp.amount for exp in expenses if exp.transaction_type == 'D' and exp.currency == 'CAD')
-    debited_amount_inr = sum(exp.amount for exp in expenses if exp.transaction_type == 'D' and exp.currency == 'INR')
+    debited_amount_cad = sum(exp.owed_share for exp in current_expenses if exp.transaction_type == 'D' and exp.currency == 'CAD')
+    debited_amount_inr = sum(exp.owed_share for exp in current_expenses if exp.transaction_type == 'D' and exp.currency == 'INR')
 
-    invested_amount_cad = sum(inv.amount for inv in investments if inv.currency == 'CAD')
-    invested_amount_inr = sum(inv.amount for inv in investments if inv.currency == 'INR')
+    invested_amount_cad = sum(inv.amount for inv in current_investments if inv.currency == 'CAD')
+    invested_amount_inr = sum(inv.amount for inv in current_investments if inv.currency == 'INR')
 
     outstanding_loans_cad = 0  # Calculate this based on your loan model if available, for CAD
     outstanding_loans_inr = 0  # Calculate this based on your loan model if available, for INR
+
+     # Overall calculations
+    overall_credited_amount_cad = sum(exp.amount for exp in overall_expenses if exp.transaction_type == 'C' and exp.currency == 'CAD')
+    overall_credited_amount_inr = sum(exp.amount for exp in overall_expenses if exp.transaction_type == 'C' and exp.currency == 'INR')
+
+    overall_debited_amount_cad = sum(exp.owed_share for exp in overall_expenses if exp.transaction_type == 'D' and exp.currency == 'CAD')
+    overall_debited_amount_inr = sum(exp.owed_share for exp in overall_expenses if exp.transaction_type == 'D' and exp.currency == 'INR')
+
+    overall_invested_amount_cad = sum(inv.amount for inv in overall_investments if inv.currency == 'CAD')
+    overall_invested_amount_inr = sum(inv.amount for inv in overall_investments if inv.currency == 'INR')
 
     context = {
         'current_date': today,
@@ -72,6 +99,12 @@ def index(request):
         'invested_amount_inr': invested_amount_inr,
         'outstanding_loans_cad': outstanding_loans_cad,
         'outstanding_loans_inr': outstanding_loans_inr,
+        'overall_credited_amount_cad': overall_credited_amount_cad,
+        'overall_credited_amount_inr': overall_credited_amount_inr,
+        'overall_debited_amount_cad': overall_debited_amount_cad,
+        'overall_debited_amount_inr': overall_debited_amount_inr,
+        'overall_invested_amount_cad': overall_invested_amount_cad,
+        'overall_invested_amount_inr': overall_invested_amount_inr,
     }
 
     return render(request, 'expense_tracker/index.html', context)
@@ -115,82 +148,78 @@ def add_expense(request):
 
 @login_required
 def expense_summary(request):
-    if request.method == 'POST':
-        csv_file = request.FILES['csv_file']
-        if csv_file:
-            # Read the CSV file using pandas
-            df = pd.read_csv(csv_file)
+    current_month = date.today().month
+    current_year = date.today().year
+    categories = Category.objects.all()
+    expenses = Expense.objects.filter(user=request.user, date__year=current_year, date__month=current_month, category__in=categories)
+    expenses = expenses.exclude(description='Payment')
 
-            mani_df = df[["Date", "Description", "Category", "Cost", "Currency", "mani maran"]]
-
-            # Replace 'your_username' with the currently logged in user's username
-            user = request.user
-
-            for index, row in mani_df.iterrows():
-                dt, description, category_name, amount, currency, mani_maran = row
-                category, created = Category.objects.get_or_create(name=category_name)
-                date_obj = datetime.strptime(dt, '%Y-%m-%d')
-                amount_mani_maran = float(mani_maran)
-                amount_mani_maran = float(amount) - amount_mani_maran if amount_mani_maran > 0 else amount_mani_maran
-                transaction_type = 'debit' if amount_mani_maran < 0 else 'credit'
-                expense = Expense(user=user, category=category, currency=currency, description=description, amount=abs(amount_mani_maran), date=date_obj, transaction_type=transaction_type)
-                expense.save()
-
-            messages.success(request, 'All records have been successfully added to the Expense table.')
-        else:
-            messages.warning(request, 'No file was uploaded. Please choose a CSV file.')
-
-        # Redirect to the same page to avoid re-uploading on page refresh
-        return HttpResponseRedirect(reverse('expense_tracker:expense_summary'))
-    else:
-        current_month = date.today().month
-        current_year = date.today().year
-        categories = Category.objects.all()
-        expenses = Expense.objects.filter(user=request.user, date__year=current_year, date__month=current_month, category__in=categories)
-        expenses = expenses.exclude(description='Payment')
-
-        # Get unique month-year values
-        month_years = Expense.objects.filter(user=request.user).annotate(
+    # Get unique month-year values
+    month_years = Expense.objects.filter(user=request.user).annotate(
         month_years=ExpressionWrapper(TruncMonth('date'), output_field=CharField())
     ).values('month_years').distinct().order_by('-month_years')
-        expenses_by_category = []
-        for category in categories:
-            expenses_by_category.append({
-                'category': category.name,
-                'total': sum(exp.owed_share for exp in expenses if exp.category == category)
-            })
 
-        if expenses_by_category:
-            fig = px.bar(expenses_by_category, x='category', y='total', text='total', labels={'total': 'Expenses', 'category': 'Categories'}, title='Expenses by Category')
-        else:
-            fig = go.Figure()
-            fig.update_layout(title="Expenses by Category", xaxis_title="Categories", yaxis_title="Expenses")
-            fig.add_annotation(
-                x=0.5,
-                y=0.5,
-                xref="paper",
-                yref="paper",
-                text="No data available",
-                showarrow=False,
-                font_size=18,
-                opacity=0.7
-            )
-        graphJSON = json.dumps(fig, cls=utils.PlotlyJSONEncoder)
-        
-        # serialized_expenses = serializers.serialize('json', expenses)
-        serialized_categories = serializers.serialize('json', categories)
-        context = {
-            'month_years': month_years,
-            'graphJSON': graphJSON,
-            'expenses': expenses_to_json(expenses),
-            'categories': categories,
-        }
-        return render(request, 'expense_tracker/expense_summary.html', context)
+    expenses_by_grouped_category = []
+
+    for category, subcategories in GROUPED_CATEGORIES.items():
+        category_expenses = []
+
+        for subcategory in subcategories:
+            subcategory_expenses = sum(exp.owed_share for exp in expenses if exp.category.name == subcategory)
+            category_expenses.append(subcategory_expenses)
+        expenses_by_grouped_category.append({
+            'category': category,
+            'total': sum(category_expenses),
+            'subcategories': category_expenses
+        })
+
+    fig = go.Figure()
+
+    for idx, category in enumerate(expenses_by_grouped_category):
+        for i, subcategory_expense in enumerate(category['subcategories']):
+            fig.add_trace(go.Bar(
+                x=[category['category']],
+                y=[subcategory_expense],
+                name=GROUPED_CATEGORIES[category['category']][i],
+                text=[subcategory_expense],
+                textposition='auto',
+                legendgroup=category['category'],
+            ))
+
+    fig.update_layout(
+        title="Expenses by Grouped Category",
+        xaxis_title="Grouped Categories",
+        yaxis_title="Expenses",
+        barmode='stack',
+    )
+
+    if not expenses_by_grouped_category:
+        fig.add_annotation(
+            x=0.5,
+            y=0.5,
+            xref="paper",
+            yref="paper",
+            text="No data available",
+            showarrow=False,
+            font_size=18,
+            opacity=0.7
+        )
+
+    graphJSON = json.dumps(fig, cls=utils.PlotlyJSONEncoder)
+
+    serialized_categories = serializers.serialize('json', categories)
+    context = {
+        'month_years': month_years,
+        'graphJSON': graphJSON,
+        'expenses': expenses_to_json(expenses),
+        'categories': categories,
+    }
+    return render(request, 'expense_tracker/expense_summary.html', context)
 
 @login_required
 def expenses_summary_data(request):
     month_year = request.GET.get('month_year', None)
-    
+
     if month_year:
         year, month = month_year.split('-')
         year = int(year)
@@ -204,14 +233,40 @@ def expenses_summary_data(request):
     expenses = Expense.objects.filter(user=request.user, date__year=year, date__month=month, category__in=categories)
     expenses = expenses.exclude(description='Payment')
 
-    expenses_by_category = []
-    for category in categories:
-        expenses_by_category.append({
-            'category': category.name,
-            'total': sum(exp.owed_share for exp in expenses if exp.category == category)
+    expenses_by_grouped_category = []
+
+    for category, subcategories in GROUPED_CATEGORIES.items():
+        category_expenses = []
+
+        for subcategory in subcategories:
+            subcategory_expenses = sum(exp.owed_share for exp in expenses if exp.category.name == subcategory)
+            category_expenses.append(subcategory_expenses)
+        expenses_by_grouped_category.append({
+            'category': category,
+            'total': sum(category_expenses),
+            'subcategories': category_expenses
         })
 
-    fig = px.bar(expenses_by_category, x='category', y='total', text='total', labels={'total': 'Expenses', 'category': 'Categories'}, title='Expenses by Category')
+    fig = go.Figure()
+
+    for idx, category in enumerate(expenses_by_grouped_category):
+        for i, subcategory_expense in enumerate(category['subcategories']):
+            fig.add_trace(go.Bar(
+                x=[category['category']],
+                y=[subcategory_expense],
+                name=GROUPED_CATEGORIES[category['category']][i],
+                text=[subcategory_expense],
+                textposition='auto',
+                legendgroup=category['category'],
+            ))
+
+    fig.update_layout(
+        title="Expenses by Grouped Category",
+        xaxis_title="Grouped Categories",
+        yaxis_title="Expenses",
+        barmode='stack',
+    )
+
     graphJSON = json.dumps(fig, cls=utils.PlotlyJSONEncoder)
 
     serialized_categories = serializers.serialize('json', categories)
@@ -243,9 +298,9 @@ def sync_expenses(request):
     # Save the expenses in the Expense model
     for expense_info in expenses_list:
         if not Expense.objects.filter(id=expense_info.id).exists():
-            category = get_category(expense_info.description)
+            category = get_category_and_group(expense_info.description)
             # Create a new category if it doesn't exist
-            category, _ = Category.objects.get_or_create(name=category)
+            category, _ = Category.objects.get_or_create(name=category.name)
             expense = Expense(
                 id=expense_info.id,
                 user=request.user,
@@ -335,10 +390,15 @@ def get_expense_data(request):
     investments = Investment.objects.filter(user=request.user, date__month=current_month)
     debit_expenses = expenses.filter(transaction_type='D').values('category__name').annotate(total_amount=Sum('amount'))
     credit_expenses = expenses.filter(transaction_type='C').values('category__name').annotate(total_amount=Sum('amount'))
+    overall_debit_expenses = Expense.objects.filter(user=request.user, transaction_type='D').values('category__name').annotate(total_amount=Sum('owed_share')).order_by('-total_amount')
+    overall_credit_expenses = Expense.objects.filter(user=request.user, transaction_type='C').values('category__name').annotate(total_amount=Sum('owed_share')).order_by('-total_amount')
+
 
     return JsonResponse({
         'debit_expenses': list(debit_expenses),
         'credit_expenses': list(credit_expenses),
+        'overall_debit_expenses': list(overall_debit_expenses),
+        'overall_credit_expenses': list(overall_credit_expenses),
     }, safe=False)
 
 @login_required
