@@ -3,14 +3,16 @@ from django.conf import settings
 from django.db.models import F, Func, Value
 from django.db.models.functions import TruncMonth
 from django.db.models import ExpressionWrapper, CharField
+from django.views.generic.edit import FormView
 from django.http import HttpResponseRedirect
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib import messages
 from django.core import serializers
 from .serializers import expenses_to_json
-from django.urls import reverse
+from django.urls import reverse, reverse_lazy
 from splitwise import Splitwise
 from splitwise.expense import Expense
 from .my_splitwise import SplitWise
@@ -19,58 +21,42 @@ from datetime import date
 import plotly.graph_objs as go
 from datetime import date
 from datetime import datetime
-from .forms import CombinedForm
+from .forms import CombinedForm, BankSelectionForm, CSVUploadForm
 from .models import Expense, Investment, Category, CategoryGroup, InvestmentCategory, GROUPED_CATEGORIES
+from .expense_utils import get_cat_group
 from django.http import JsonResponse
 import matplotlib.pyplot as plt
 import plotly.express as px
 import plotly.utils as utils
 import pandas as pd
+import numpy as np
 import json
 import pickle
-
-model_path = 'expense_tracker/trained_model.pkl'
-
-def load_trained_model(model_path):
-    with open(model_path, 'rb') as f:
-        model = pickle.load(f)
-    return model
-
-model = load_trained_model(model_path)
-
-def get_category_and_group(description):
-    predicted_category = model.predict([description])[0]
-
-     # Iterate through GROUPED_CATEGORIES to find the correct category and group for the given description
-    for group, categories in GROUPED_CATEGORIES.items():
-        if predicted_category in categories:
-            group_name = group
-            category_name = predicted_category
-            break
-
-    # Get or create the CategoryGroup instance
-    group, _ = CategoryGroup.objects.get_or_create(name=group_name)
-
-    # Get or create the Category instance
-    category, _ = Category.objects.get_or_create(name=category_name, group=group)
-
-    return category
+from .expense_utils import create_catgroup_db, clean_description
 
 @login_required
 def index(request):
     today = date.today()
+    current_year = date.today().year
     current_month = today.month
-    current_expenses = Expense.objects.filter(user=request.user, date__month=current_month)
+    current_expenses = Expense.objects.filter(user=request.user, date__month=current_month, date__year=current_year)
     overall_expenses = Expense.objects.filter(user=request.user)
-    current_investments = Investment.objects.filter(user=request.user, date__month=current_month)
+    current_investments = Investment.objects.filter(user=request.user, date__month=current_month, date__year=current_year)
     overall_investments = Investment.objects.filter(user=request.user)
 
-    # Current month calculations
-    credited_amount_cad = sum(exp.amount for exp in current_expenses if exp.transaction_type == 'C' and exp.currency == 'CAD')
-    credited_amount_inr = sum(exp.amount for exp in current_expenses if exp.transaction_type == 'C' and exp.currency == 'INR')
+    #paycheck object
+    paycheck_category = Category.objects.get(name="Paycheck", group__name="Income")
 
-    debited_amount_cad = sum(exp.owed_share for exp in current_expenses if exp.transaction_type == 'D' and exp.currency == 'CAD')
-    debited_amount_inr = sum(exp.owed_share for exp in current_expenses if exp.transaction_type == 'D' and exp.currency == 'INR')
+    # Current month calculations
+    credited_amount_cad = sum(exp.amount for exp in current_expenses if exp.transaction_type == 'C' and 
+                              exp.currency == 'CAD' and exp.category == paycheck_category)
+    credited_amount_inr = sum(exp.amount for exp in current_expenses if exp.transaction_type == 'C' and 
+                              exp.currency == 'INR')
+
+    debited_amount_cad = sum(exp.owed_share for exp in current_expenses if exp.transaction_type == 'D' and 
+                             exp.currency == 'CAD')
+    debited_amount_inr = sum(exp.owed_share for exp in current_expenses if exp.transaction_type == 'D' and 
+                             exp.currency == 'INR')
 
     invested_amount_cad = sum(inv.amount for inv in current_investments if inv.currency == 'CAD')
     invested_amount_inr = sum(inv.amount for inv in current_investments if inv.currency == 'INR')
@@ -79,7 +65,7 @@ def index(request):
     outstanding_loans_inr = 0  # Calculate this based on your loan model if available, for INR
 
      # Overall calculations
-    overall_credited_amount_cad = sum(exp.amount for exp in overall_expenses if exp.transaction_type == 'C' and exp.currency == 'CAD')
+    overall_credited_amount_cad = sum(exp.amount for exp in overall_expenses if exp.transaction_type == 'C' and exp.currency == 'CAD' and exp.category == paycheck_category)
     overall_credited_amount_inr = sum(exp.amount for exp in overall_expenses if exp.transaction_type == 'C' and exp.currency == 'INR')
 
     overall_debited_amount_cad = sum(exp.owed_share for exp in overall_expenses if exp.transaction_type == 'D' and exp.currency == 'CAD')
@@ -137,6 +123,7 @@ def add_expense(request):
                     owed_share=form.cleaned_data['owed_share'],
                     date=form.cleaned_data['date'],
                     transaction_type=transaction_type,
+                    account=form.cleaned_data['account']
                 )
                 expense.save()
                 messages.success(request, 'Expense successfully added')
@@ -151,8 +138,16 @@ def expense_summary(request):
     current_month = date.today().month
     current_year = date.today().year
     categories = Category.objects.all()
-    expenses = Expense.objects.filter(user=request.user, date__year=current_year, date__month=current_month, category__in=categories)
+
+    #default values to show on load
+    account = 'Splitwise'
+    transaction_type = 'D'
+    expenses = Expense.objects.filter(user=request.user, date__year=current_year, date__month=current_month
+                                      , category__in=categories, account=account, transaction_type=transaction_type)
     expenses = expenses.exclude(description='Payment')
+
+    accounts = Expense.objects.values('account').distinct()
+    transaction_types = Expense.objects.values('transaction_type').distinct()
 
     # Get unique month-year values
     month_years = Expense.objects.filter(user=request.user).annotate(
@@ -208,19 +203,24 @@ def expense_summary(request):
     graphJSON = json.dumps(fig, cls=utils.PlotlyJSONEncoder)
 
     serialized_categories = serializers.serialize('json', categories)
+    # import pdb; pdb.set_trace
     context = {
         'month_years': month_years,
         'graphJSON': graphJSON,
         'expenses': expenses_to_json(expenses),
         'categories': categories,
+        'accounts': accounts,
+        'transaction_types': transaction_types
     }
     return render(request, 'expense_tracker/expense_summary.html', context)
 
 @login_required
 def expenses_summary_data(request):
-    month_year = request.GET.get('month_year', None)
+    month_year = request.GET.get('month_year')
+    account = request.GET.get('account')
+    transaction_type = request.GET.get('transaction_type')
 
-    if month_year:
+    if month_year and '-' in month_year and len(month_year) == 7:
         year, month = month_year.split('-')
         year = int(year)
         month = int(month)
@@ -229,8 +229,24 @@ def expenses_summary_data(request):
         year = today.year
         month = today.month
 
+    # Initial query
+    expenses = Expense.objects.filter(user=request.user)
+
+    if month_year:
+        if len(month_year) == 1:
+            year, month = today.year, today.month
+        else:
+            year, month = map(int, month_year.split('-'))
+        expenses = expenses.filter(date__year=year, date__month=month)
+
+    if account:
+        expenses = expenses.filter(account=account)
+
+    if transaction_type:
+        expenses = expenses.filter(transaction_type=transaction_type)
+
     categories = Category.objects.all()
-    expenses = Expense.objects.filter(user=request.user, date__year=year, date__month=month, category__in=categories)
+    # expenses = Expense.objects.filter(user=request.user, date__year=year, date__month=month, category__in=categories)
     expenses = expenses.exclude(description='Payment')
 
     expenses_by_grouped_category = []
@@ -298,7 +314,7 @@ def sync_expenses(request):
     # Save the expenses in the Expense model
     for expense_info in expenses_list:
         if not Expense.objects.filter(id=expense_info.id).exists():
-            category = get_category_and_group(expense_info.description)
+            category = create_catgroup_db(expense_info.description)
             # Create a new category if it doesn't exist
             category, _ = Category.objects.get_or_create(name=category.name)
             expense = Expense(
@@ -310,7 +326,8 @@ def sync_expenses(request):
                 amount=expense_info.total_amount,
                 owed_share=expense_info.owed_share,
                 currency=expense_info.currency,
-                transaction_type='D',
+                transaction_type='D', #we only track Debited expenses here
+                account='Splitwise' #for splitwise expenses it will be Splitwise
             )
             expense.save()
 
@@ -326,12 +343,13 @@ def create_expense(request):
         category_name = request.POST.get('category')
         amount = request.POST.get('amount')
         transaction_type = request.POST.get('transaction_type')
+        account = request.POST.get('account')
         
         # Create and save the new expense
         user = request.user
         category, created = Category.objects.get_or_create(name=category_name)
         date_obj = datetime.strptime(date, '%Y-%m-%d')
-        expense = Expense(user=user, category=category, description=description, amount=amount, date=date_obj, transaction_type=transaction_type)
+        expense = Expense(user=user, category=category, description=description, amount=amount, date=date_obj, transaction_type=transaction_type, account=account)
         expense.save()
         
         return JsonResponse({'status': 'success'})
@@ -348,6 +366,7 @@ def update_expense(request):
         amount = request.POST.get('amount')
         owed_share = request.POST.get('owed_share')
         transaction_type = request.POST.get('transaction_type')
+        account = request.POST.get('account')
         
         # Update the existing expense
         user = request.user
@@ -360,6 +379,7 @@ def update_expense(request):
         expense.amount = amount
         expense.owed_share = owed_share
         expense.transaction_type = transaction_type
+        expense.account = account
         expense.save()
         
         return JsonResponse({'status': 'success'})
@@ -384,10 +404,11 @@ def get_expense_categories(request):
 
 @login_required
 def get_expense_data(request):
-    today = date.today()
-    current_month = today.month
-    expenses = Expense.objects.filter(user=request.user, date__month=current_month)
-    investments = Investment.objects.filter(user=request.user, date__month=current_month)
+    current_month = date.today().month
+    current_year = date.today().year
+    
+    expenses = Expense.objects.filter(user=request.user, date__month=current_month, date__year=current_year)
+    investments = Investment.objects.filter(user=request.user, date__month=current_month, date__year=current_year)
     debit_expenses = expenses.filter(transaction_type='D').values('category__name').annotate(total_amount=Sum('amount'))
     credit_expenses = expenses.filter(transaction_type='C').values('category__name').annotate(total_amount=Sum('amount'))
     overall_debit_expenses = Expense.objects.filter(user=request.user, transaction_type='D').values('category__name').annotate(total_amount=Sum('owed_share')).order_by('-total_amount')
@@ -405,3 +426,65 @@ def get_expense_data(request):
 def get_investment_categories(request):
     categories = InvestmentCategory.objects.values('id', 'name')
     return JsonResponse(list(categories), safe=False)
+
+
+class BankStatementLoaderView(LoginRequiredMixin, FormView):
+    template_name = 'expense_tracker/banking_loader.html'
+    form_class = BankSelectionForm
+    success_url = reverse_lazy('expense_tracker:bank_statement_loader')
+
+    def get_context_data(self, **kwargs):
+        data = super().get_context_data(**kwargs)
+        if self.request.POST:
+            data['csv_form'] = CSVUploadForm(self.request.POST, self.request.FILES)
+        else:
+            data['csv_form'] = CSVUploadForm()
+        return data
+
+    def form_valid(self, form):
+        context = self.get_context_data()
+        csv_form = context['csv_form']
+        if csv_form.is_valid():
+            bank = form.cleaned_data.get('bank')
+
+            if bank == 'CIBC':
+                form_class = CSVUploadForm
+                form = form_class(self.request.POST, self.request.FILES)
+
+                if form.is_valid():
+                    csv_file = form.cleaned_data.get('csv_file')
+                    df = pd.read_csv(csv_file, names=["date", "description", "debit", "credit", "card"])
+                    df['card'] = df['card'].astype(str)
+                    df['card'] = df['card'].replace('nan', '')
+
+                    df['account'] = np.where(df['card'] == '', "CIBC - Chequing", np.where(df['card'].str.endswith('3603'), "CIBC - Credit", ""))
+                    
+                    for index, row in df.iterrows():
+                        account = row['account']
+                        user = self.request.user
+                        description = clean_description(row['description'])
+                        category = create_catgroup_db(description, account)
+                        currency = 'CAD'
+                        date = row['date']
+                        amount = None
+                        transaction_type = None
+                        if not np.isnan(row['debit']):
+                            amount = row['debit']
+                            transaction_type = 'D'
+                            owed_share = row['debit']
+                        else:
+                            amount = row['credit']
+                            transaction_type = 'C'
+                            owed_share = 0.0
+
+                        Expense.objects.create(date=date, 
+                                               user=user,
+                                               description=description, 
+                                               amount=amount,
+                                               transaction_type=transaction_type,
+                                               owed_share=owed_share,
+                                               currency=currency, 
+                                               category=category, 
+                                               account=account)
+
+        return super().form_valid(form)

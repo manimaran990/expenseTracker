@@ -1,0 +1,19 @@
+{% extends 'expense_tracker/base.html' %}
+
+{% load static %}
+
+{% block content %}
+
+<div class="container mt-4">
+    <h2 class="mb-4">Add Bank Transactions</h2>
+    <form method="post" enctype="multipart/form-data" class="form-group">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div id="uploadForm">
+            {{ csv_form.as_p }}
+        </div>
+        <button type="submit" class="btn btn-primary">Upload</button>
+    </form>
+</div>
+
+{% endblock %}

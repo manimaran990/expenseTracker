@@ -1,6 +1,6 @@
 from django import forms
 from django.forms import ModelForm, DateInput
-from .models import Expense, Investment, Category, InvestmentCategory, CURRENCY_TYPE_CHOICES
+from .models import Expense, Investment, Category, InvestmentCategory, CURRENCY_TYPE_CHOICES, ACCOUNT_TYPES
 from datetime import date
 
 class DateInput(forms.DateInput):
@@ -14,6 +14,7 @@ class CombinedForm(forms.Form):
     date = forms.DateField(widget=DateInput(attrs={'value': date.today().strftime('%Y-%m-%d')}))
     transaction_type = forms.ChoiceField(choices=Expense.TRANSACTION_TYPE_CHOICES)
     owed_share = forms.DecimalField(required=False, initial=0.0)
+    account = forms.ChoiceField(choices=ACCOUNT_TYPES)
 
     # Expense fields
     category = forms.ModelChoiceField(queryset=Category.objects.all())
@@ -29,3 +30,20 @@ class CombinedForm(forms.Form):
             cleaned_data['owed_share'] = 0.0
 
         return cleaned_data
+    
+class BankSelectionForm(forms.Form):
+    BANK_CHOICES = [
+        ('CIBC', 'CIBC'),
+        ('Axis', 'Axis'),
+        ('Other', 'Other'),
+    ]
+    bank = forms.ChoiceField(choices=BANK_CHOICES)
+
+class CSVUploadForm(forms.Form):
+    csv_file = forms.FileField()
+
+    def clean_csv_file(self):
+        csv_file = self.cleaned_data.get('csv_file')
+        if not csv_file:
+            raise forms.ValidationError("No file uploaded!")
+        return csv_file

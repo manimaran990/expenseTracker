@@ -55,11 +55,17 @@
                     <div class="form-group">
                         <label for="edit_transaction_type">Transaction Type</label>
                         <select class="form-control" id="edit_transaction_type" name="transaction_type" required>
-                            <option value="D">Debit</option>
-                            <option value="C">Credit</option>
-                            <option value="I">Investmet</option>
-                            <option value="R">Refund</option>
-                            <option value="T">Transfer</option>
+                            {% for transaction_type in transaction_types %}
+                                <option value="{{ transaction_type.transaction_type }}">{{ transaction_type.transaction_type }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_account">Account</label>
+                        <select class="form-control" id="edit_account" name="account" required>
+                            {% for account in accounts %}
+                                <option value="{{ account.account }}">{{ account.account }}</option>
+                            {% endfor %}
                         </select>
                     </div>
                     <!-- Add the hidden input field for expense_id before the closing div tag -->
@@ -75,17 +81,35 @@
 </div>
 
 <div class="row">
-    <div class="col-md-8">
+    <div class="col-md-4">
         <label for="month-year-select">Select Month-Year:</label>
-        <select id="month-year-select">
-            <option value="{{ current_year }}-{{ current_month }}">--Current Month-Year--</option>
+        <select id="month-year-select" class="form-control">
+            <option value="{{ current_year }}-{{ current_month }}" selected>--Current Month-Year--</option>
             {% for month_year in month_years %}
-            <pre>{{ month_years }}</pre>
             <option value="{{ month_year.month_years|slice:':7' }}">{{ month_year.month_years|slice:':7' }}</option>
             {% endfor %}
         </select>
     </div>
 
+    <div class="col-md-4">
+        <label for="account-select">Select Account:</label>
+        <select id="account-select" class="form-control">
+            <option value="Splitwise" selected>--Select Account--</option>
+            {% for account in accounts %}
+            <option value="{{ account.account }}">{{ account.account }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="col-md-4">
+        <label for="transaction-select">Select Transaction Type:</label>
+        <select id="transaction-select" class="form-control">
+            <option value="D" selected>--Select Transaction Type--</option>
+            {% for transaction_type in transaction_types %}
+            <option value="{{ transaction_type.transaction_type }}">{{ transaction_type.transaction_type }}</option>
+            {% endfor %}
+        </select>
+    </div>
 </div>
 
 <div id="graph-container" style="width:100%;height:600px;"></div>
@@ -134,15 +158,33 @@
                 'gas/fuel': '#1f77b4',
                 'taxi': '#ff7f0e',
                 'car': '#2ca02c',
-                'parking': '#d62728'
+                'parking': '#d62728',
+                'flight': '#8c564b'
             },
             'refund': {
                 'refund': '#9467bd'
             },
+            'online': {
+                'shopping': '#8c564b',
+                'subscription': '#e377c2'
+            },
+            'banking': {
+                'payment': '#7f7c7f',
+                'interest': '#bcbd22',
+                'service charge': '#17becf',
+                'transfer': '#6b8e23',
+                'withdraw': '#800000',
+                'bill payment': '#ff1493'
+            },
             'shopping': {
-                'online shopping': '#8c564b',
-                'household supplies': '#e377c2',
-                'groceries': '#7f7c7f'
+                'shopping - general': '#1E90FF',
+                'household supplies': '#FF4500',
+                'groceries': '#00FF7F',
+                'clothing': '#9400D3',
+                'furnitures': '#FFD700',
+                'electronics': '#8B0000',
+                'games': '#800080',
+                'sports': '#cd5c5c'
             },
             'food': {
                 'fruits': '#bcbd22',
@@ -151,7 +193,8 @@
                 'restaurant': '#800000'
             },
             'income': {
-                'paycheck': '#ff1493'
+                'paycheck': '#ff1493',
+                'dividends': '#1E90FF'
             },
             'utility': {
                 'trash': '#800080',
@@ -178,6 +221,9 @@
             },
             'public transport': {
                 'bus/train': '#8B0000'
+            },
+            'misc': {
+                'misc': '#800080'
             }
         };
 
@@ -282,31 +328,30 @@
         $(this).siblings('.custom-file-label').addClass('selected').html(fileName);
     });
 
-    $('#month-year-select').on('change', function () {
-        var selectedMonthYear = $(this).val();
-        console.log(selectedMonthYear);
+    $('#month-year-select, #account-select, #transaction-select').on('change', function () {
+        var selectedMonthYear = $('#month-year-select').val();
+        var selectedAccount = $('#account-select').val();
+        var selectedTransactionType = $('#transaction-select').val();
 
-        if (selectedMonthYear) {
-            $.ajax({
-                url: "{% url 'expense_tracker:expenses_summary_data' %}",
-                data: {
-                    'month_year': selectedMonthYear
-                },
-                success: function (data) {
-                    console.log('AJAX response data:', data);
-                    var parsedGraphJSON = JSON.parse(data.graphJSON);
-                    var parsedTableJSON = JSON.parse(data.expenses);
-                    console.log("after choosing dropdown: ", parsedTableJSON)
-                    drawGraph(parsedGraphJSON);
-                    populateExpenseTable(parsedTableJSON, expenseTable);
-                },
-                error: function (jqXHR, textStatus, errorThrown) {
-                    console.log('AJAX error:', textStatus, errorThrown);
-                }
-            });
-        } else {
-            // Handle empty selection if needed
-        }
+        $.ajax({
+            url: "{% url 'expense_tracker:expenses_summary_data' %}",
+            data: {
+                'month_year': selectedMonthYear,
+                'account': selectedAccount,
+                'transaction_type': selectedTransactionType
+            },
+            success: function (data) {
+                console.log('AJAX response data:', data);
+                var parsedGraphJSON = JSON.parse(data.graphJSON);
+                var parsedTableJSON = JSON.parse(data.expenses);
+                console.log("parsed Table json: ", parsedTableJSON)
+                drawGraph(parsedGraphJSON);
+                populateExpenseTable(parsedTableJSON, expenseTable);
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                console.log('AJAX error:', textStatus, errorThrown);
+            }
+        }); // Trigger the change event;
     });
 
     // Edit button event listener
@@ -322,6 +367,7 @@
         form.find('input[name="amount"]').val(rowData[4]);
         form.find('input[name="owed_share"]').val(rowData[5]);
         form.find('select[name="transaction_type"]').val(rowData[6]);
+        form.find('select[name="account"]').val(rowData[7]);
         form.find('input[name="expense_id"]').val(rowData[0]); // Set the hidden input field for expense_id
 
         // Show the form

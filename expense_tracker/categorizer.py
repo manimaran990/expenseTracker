@@ -4,6 +4,7 @@ pip install numpy scipy scikit-learn pandas matplotlib
 """
 import re
 import csv
+import sys
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.naive_bayes import MultinomialNB
@@ -81,24 +82,27 @@ def categorize_expense(description, ml_model=None):
     # Default category if no match found
     return 'Uncategorized'
 
-data = []
-with open('labeled_dataset.csv', 'r') as f:
-    reader = csv.DictReader(f)
-    for row in reader:
-        data.append((row.get('description'), row.get('category')))
+def train_model(labeled_dataset):
+    data = []
+    with open(labeled_dataset, 'r') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            data.append((row.get('description'), row.get('category')))
+
+    descriptions, categories = zip(*data)
+
+    # Split data into train and test sets
+    X_train, X_test, y_train, y_test = train_test_split(descriptions, categories, test_size=0.2, random_state=12)
+
+    # Train the machine learning model
+    ml_model = train_ml_model(X_train, y_train)
+
+    # Assuming your trained model is named 'model'
+    with open('trained_model.pkl', 'wb') as f:
+        pickle.dump(ml_model, f)
 
 
-descriptions, categories = zip(*data)
-
-# Split data into train and test sets
-X_train, X_test, y_train, y_test = train_test_split(descriptions, categories, test_size=0.2, random_state=12)
-
-# Train the machine learning model
-ml_model = train_ml_model(X_train, y_train)
-
-# Assuming your trained model is named 'model'
-with open('trained_model.pkl', 'wb') as f:
-    pickle.dump(ml_model, f)
+# train_model(sys.argv[1])
 
 # Test the model
 # y_pred = [categorize_expense(desc, ml_model) for desc in X_test]

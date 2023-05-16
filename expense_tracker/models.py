@@ -2,11 +2,13 @@ from django.db import models
 from django.contrib.auth.models import User
 
 GROUPED_CATEGORIES = {
-    'Transit': ['Gas/fuel', 'Taxi', 'Car', 'Parking'],
+    'Transit': ['Gas/fuel', 'Taxi', 'Car', 'Parking', 'Flight'],
     'Refund': ['Refund'],
-    'Shopping': ['Online Shopping', 'Household supplies', 'Groceries'],
+    'Online': ['Shopping', 'Subscription'],
+    'Banking': ['Payment', 'Interest', 'Service charge', 'Transfer', 'Withdraw', 'Bill Payment'],
+    'Shopping': ['Shopping - General', 'Household supplies', 'Groceries', 'Clothing', 'Furnitures', 'Electronics', 'Games', 'Sports'],
     'Food': ['Fruits', 'Fish/Meat', 'Dining out', 'Restaurant'],
-    'Income': ['Paycheck'],
+    'Income': ['Paycheck', 'Dividends'],
     'Utility': ['Trash', 'TV/Phone/Internet', 'Rent'],
     'Entertainment': ['Entertainment - Other', 'Movies', 'Entertainment'],
     'Insurance': ['Insurance'],
@@ -14,7 +16,18 @@ GROUPED_CATEGORIES = {
     'Liquor': ['Liquor'],
     'General': ['General'],
     'Public Transport': ['Bus/train'],
+    'Misc': ['Misc']
 }
+
+ACCOUNT_TYPES = [
+    ('AXIS - Debit', 'Axis bank Debit account'),
+    ('AXIS - Credit', 'Axis bank Credit account'),
+    ('CIBC - Chequing', 'CIBC bank Chequing account'),
+    ('CIBC - Savings', 'CIBC bank Savings account'),
+    ('CIBC - Credit', 'CIBC bank Credit account'),
+    ('Splitwise', 'Splitwise Group Expenses'),
+    ('Other', 'Other accounts'),
+]
 
 CURRENCY_TYPE_CHOICES = [
         ('CAD', 'Canadian Dollar'),
@@ -73,6 +86,7 @@ class Expense(models.Model):
     owed_share = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
     date = models.DateField()
     transaction_type = models.CharField(max_length=1, choices=TRANSACTION_TYPE_CHOICES, default='D')
+    account = models.CharField(max_length=15, choices=ACCOUNT_TYPES, default='Other')
 
     def __str__(self):
         return f"{self.description} - {self.amount} - {self.date}"

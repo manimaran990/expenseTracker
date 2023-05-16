@@ -1,6 +1,7 @@
 expense_tracker/config.py
 expense_tracker/labeled_dataset.csv
 expense_tracker/migrations
+expense_tracker/bank_transactions
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

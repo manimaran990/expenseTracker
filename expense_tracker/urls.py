@@ -1,6 +1,7 @@
 from django.urls import path
 from django.contrib.auth import views as auth_views
 from . import views
+from .views import BankStatementLoaderView
 
 app_name = "expense_tracker"
 urlpatterns = [
@@ -18,4 +19,6 @@ urlpatterns = [
     path('get_expense_categories/', views.get_expense_categories, name='get_expense_categories'),
     path('get_investment_categories/', views.get_investment_categories, name='get_investment_categories'),
     path('get_expense_data/', views.get_expense_data, name='get_expense_data'),
+    path('bank_statement_loader/', BankStatementLoaderView.as_view(), name='bank_statement_loader'),
+
 ]
