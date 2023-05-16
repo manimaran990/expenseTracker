@@ -302,7 +302,6 @@ def splitwise(request):
         'groups_list': groups_list
     }
     
-    messages.success(request, 'Sync operation completed successfully!')
     return render(request, 'expense_tracker/splitwise.html', context)
 
 @login_required
@@ -331,6 +330,7 @@ def sync_expenses(request):
             )
             expense.save()
 
+    messages.success(request, 'Sync operation completed successfully!')
     return JsonResponse({"status": "success"})
 
 @login_required
@@ -458,7 +458,7 @@ class BankStatementLoaderView(LoginRequiredMixin, FormView):
                     df['card'] = df['card'].replace('nan', '')
 
                     df['account'] = np.where(df['card'] == '', "CIBC - Chequing", np.where(df['card'].str.endswith('3603'), "CIBC - Credit", ""))
-                    
+
                     for index, row in df.iterrows():
                         account = row['account']
                         user = self.request.user
