@@ -1,5 +1,6 @@
 from django import forms
 from django.forms import ModelForm, DateInput
+from bootstrap4.widgets import RadioSelectButtonGroup
 from .models import Expense, Investment, Category, InvestmentCategory, CURRENCY_TYPE_CHOICES, ACCOUNT_TYPES
 from datetime import date
 
@@ -37,10 +38,10 @@ class BankSelectionForm(forms.Form):
         ('Axis', 'Axis'),
         ('Other', 'Other'),
     ]
-    bank = forms.ChoiceField(choices=BANK_CHOICES)
+    bank = forms.ChoiceField(choices=BANK_CHOICES, widget=RadioSelectButtonGroup)
 
 class CSVUploadForm(forms.Form):
-    csv_file = forms.FileField()
+    csv_file = forms.FileField(widget=forms.ClearableFileInput(attrs={'class': 'form-control-file'}))
 
     def clean_csv_file(self):
         csv_file = self.cleaned_data.get('csv_file')

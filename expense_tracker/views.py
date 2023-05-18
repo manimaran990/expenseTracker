@@ -313,7 +313,7 @@ def sync_expenses(request):
     # Save the expenses in the Expense model
     for expense_info in expenses_list:
         if not Expense.objects.filter(id=expense_info.id).exists():
-            category = create_catgroup_db(expense_info.description)
+            category = create_catgroup_db(expense_info.description, 'Splitwise')
             # Create a new category if it doesn't exist
             category, _ = Category.objects.get_or_create(name=category.name)
             expense = Expense(
@@ -486,5 +486,11 @@ class BankStatementLoaderView(LoginRequiredMixin, FormView):
                                                currency=currency, 
                                                category=category, 
                                                account=account)
+            elif bank == 'Axis':
+                form_class = CSVUploadForm
+                form = form_class(self.request.POST, self.request.FILES)
+
+                if form.is_valid():
+                    pass
 
         return super().form_valid(form)

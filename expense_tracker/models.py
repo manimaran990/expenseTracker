@@ -11,11 +11,12 @@ GROUPED_CATEGORIES = {
     'Income': ['Paycheck', 'Dividends'],
     'Utility': ['Trash', 'TV/Phone/Internet', 'Rent'],
     'Entertainment': ['Entertainment - Other', 'Movies', 'Entertainment'],
-    'Insurance': ['Insurance'],
+    'Insurance': ['Insurance', 'TermInsurance'],
     'Gifts': ['Gifts', 'Cake'],
     'Liquor': ['Liquor'],
     'General': ['General'],
     'Public Transport': ['Bus/train'],
+    'Investment': ['MF', 'ETF', 'Gold', 'Crypto', 'PPF'],
     'Misc': ['Misc']
 }
 

@@ -23,13 +23,18 @@ model = load_trained_model(model_path)
 def regex_mapping(description):
     patterns = {
         'Paycheck': r'\b(infosys)\b',
-        'Transfer': r'\b(etransfer|internet banking etransfer|internet transfer|remitly|global money transfer)\b',
+        'Transfer': r'\b(etransfer|internet banking etransfer|internet transfer|remitly|global money transfer|transfer)\b',
         'Payment': r'\b(bill pay|hydroquebec)\b',
-        'Service charge': r'\b(service charge)\b',
+        'Service charge': r'\b(service charge|charges)\b',
         'Refund': r'\b(deposit canada|deposit versanti)\b',
         'Withdraw': r'\b(withdrawal|atm)\b',
         'Shopping': r'\b(point of sale|retail purchase|costco)\b',
-        'Interest': r'\b(interest)\b'
+        'Interest': r'\b(interest)\b',
+        'MF': r'\b(etmoney|banayantreeservices|razorpay)\b',
+        'Gold': r'\b(digigold)\b',
+        'TermInsurance': r'\b(maxlife|apy)\b',
+        'Subscription': r'\b(apple services|billdesk)\b'
+
     }
 
     for category, pattern in patterns.items():
@@ -43,7 +48,7 @@ def get_cat_group(description, account):
     cleaned_description = cleaned_description.strip()
     if account == 'CIBC - Credit' or account == 'Splitwise':
         predicted_category = model.predict([cleaned_description])[0].strip().capitalize()
-    elif account == 'CIBC - Chequing':
+    elif account == 'CIBC - Chequing' or account == 'Axis - Debit':
         predicted_category = regex_mapping(description)
     else:
         pass

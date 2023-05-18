@@ -17,7 +17,7 @@
     overflow: hidden;
 }
 
-.custom-file-input:focus ~ .custom-file-label {
+.custom-file-input:focus~.custom-file-label {
     border-color: #80bdff;
     box-shadow: none;
 }
@@ -31,4 +31,22 @@
 
 .custom-file-label::after {
     content: "";
+}
+
+/* Light mode */
+body.light-mode {
+    background-color: #fff;
+    color: #333;
+}
+
+/* Dark mode */
+body.dark-mode {
+    background-color: #333;
+    color: #fff;
+}
+
+.custom-switch {
+    /* adjust these values as necessary */
+    margin-top: 1px;
+    margin-bottom: 1px;
 }
